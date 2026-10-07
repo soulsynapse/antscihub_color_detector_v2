@@ -2,19 +2,19 @@
   "version": 1,
   "bounds": {
     "H": [
-      48,
-      72
+      67,
+      102
     ],
     "S": [
-      0,
+      154,
       255
     ],
     "V": [
-      105,
-      200
+      83,
+      166
     ]
   },
-  "min_area": 126,
+  "min_area": 1,
   "merge_distance": 0,
   "colors": []
 }

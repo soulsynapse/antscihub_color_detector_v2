@@ -357,6 +357,11 @@ class HistogramTab(QWidget):
         self.color_store.merge_distance = value
         self._update_frame_stats()
 
+    def sync_detection_controls(self):
+        # Spinboxes drive their sliders and write back to the store (a no-op when equal).
+        self.area_spinbox.setValue(self.color_store.min_area)
+        self.merge_spinbox.setValue(self.color_store.merge_distance)
+
     # ── Search ──
 
     def _start_search(self, condition):

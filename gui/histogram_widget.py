@@ -26,6 +26,7 @@ class HistogramWidget(QWidget):
 
         self.color_points = []
         self.show_masked = False  # toggled by shift
+        self.x_wraps = x_name == 'H'
 
         bounds = self.color_store.get_bounds()
         self.x_lo = bounds[x_name][0]
@@ -111,24 +112,24 @@ class HistogramWidget(QWidget):
         y_lo_px = self._data_to_pixel_y(self.y_lo)
         y_hi_px = self._data_to_pixel_y(self.y_hi)
 
-        sel_left = int(min(x_lo_px, x_hi_px))
-        sel_right = int(max(x_lo_px, x_hi_px))
         sel_top = int(min(y_lo_px, y_hi_px))
         sel_bottom = int(max(y_lo_px, y_hi_px))
 
-        # Selected region - very subtle light tint
-        sel_rect = QRect(sel_left, sel_top, sel_right - sel_left, sel_bottom - sel_top)
-        painter.fillRect(sel_rect, QColor(255, 255, 255, 15))
+        # A wrapped range (lo > hi) selects the two outer strips instead of the middle
+        wrapped = self.x_lo > self.x_hi
+        if wrapped:
+            x_spans = [(r.left(), int(x_hi_px)), (int(x_lo_px), r.right())]
+        else:
+            x_spans = [(int(x_lo_px), int(x_hi_px))]
 
-        # Dim outside regions
-        painter.fillRect(QRect(r.left(), r.top(), sel_left - r.left(), r.height()),
-                         QColor(0, 0, 0, 120))
-        painter.fillRect(QRect(sel_right, r.top(), r.right() - sel_right, r.height()),
-                         QColor(0, 0, 0, 120))
-        painter.fillRect(QRect(sel_left, r.top(), sel_right - sel_left, sel_top - r.top()),
-                         QColor(0, 0, 0, 120))
-        painter.fillRect(QRect(sel_left, sel_bottom, sel_right - sel_left, r.bottom() - sel_bottom),
-                         QColor(0, 0, 0, 120))
+        # Excluded area - dark red wash over the whole plot, cleared again inside the selection
+        painter.fillRect(r, QColor(160, 20, 20, 140))
+
+        # Selected region - very subtle light tint
+        for span_left, span_right in x_spans:
+            sel_rect = QRect(span_left, sel_top, span_right - span_left, sel_bottom - sel_top)
+            painter.fillRect(sel_rect, QColor(0, 0, 0))
+            painter.fillRect(sel_rect, QColor(255, 255, 255, 15))
 
         # Boundary lines - white so they're neutral
         pen = QPen(QColor(255, 255, 255, 160), 1, Qt.PenStyle.DashLine)
@@ -172,6 +173,8 @@ class HistogramWidget(QWidget):
         font = QFont("Monospace", 8)
         painter.setFont(font)
         title = f"{self.x_name} vs {self.y_name}"
+        if wrapped:
+            title += f"  [{self.x_name} WRAPS]"
         if self.show_masked:
             title += "  [MASKED]"
         painter.drawText(r.left(), r.top() - 5, title)
@@ -240,7 +243,13 @@ class HistogramWidget(QWidget):
             if self._dragging in ('x_lo', 'x_hi'):
                 val = self._pixel_to_data_x(event.pos().x())
                 val = max(self.x_range[0], min(self.x_range[1], val))
-                if self._dragging == 'x_lo':
+                # Hue is circular: dragging one bar past the other inverts the range
+                if self.x_wraps:
+                    if self._dragging == 'x_lo':
+                        self.x_lo = val
+                    else:
+                        self.x_hi = val
+                elif self._dragging == 'x_lo':
                     self.x_lo = min(val, self.x_hi)
                 else:
                     self.x_hi = max(val, self.x_lo)

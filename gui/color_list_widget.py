@@ -32,6 +32,16 @@ class ColorListWidget(QWidget):
         save_btn.clicked.connect(self._save_settings)
         layout.addWidget(save_btn)
 
+        load_btn = QPushButton("Load Settings")
+        load_btn.setToolTip("Load bounds, picked colors, and detection settings from JSON (replaces current)")
+        load_btn.setStyleSheet(
+            "QPushButton { color: #aaddff; background: #2a2a2a; border: 1px solid #555; "
+            "padding: 4px 10px; border-radius: 3px; }"
+            "QPushButton:hover { background: #243846; }"
+        )
+        load_btn.clicked.connect(self._load_settings)
+        layout.addWidget(load_btn)
+
         clear_excluded_btn = QPushButton("Clear Excluded")
         clear_excluded_btn.setToolTip("Remove all colors that fall outside current bounds")
         clear_excluded_btn.setStyleSheet(
@@ -61,6 +71,21 @@ class ColorListWidget(QWidget):
         if not path:
             return
         ok, message = self.color_store.save_settings(path)
+        self._show_status(ok, message)
+
+    def _load_settings(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Color Settings",
+            "",
+            "JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        ok, message = self.color_store.load_settings(path)
+        self._show_status(ok, message)
+
+    def _show_status(self, ok: bool, message: str):
         color = "#66cc66" if ok else "#ff8888"
         self.status_label.setStyleSheet(f"color: {color}; font-family: monospace; font-size: 10px;")
         self.status_label.setText(message)

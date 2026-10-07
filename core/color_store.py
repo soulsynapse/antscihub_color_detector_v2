@@ -177,3 +177,40 @@ class ColorStore(QObject):
             return True, f"Saved settings to {out_path.name}"
         except Exception as exc:
             return False, f"Save failed: {exc}"
+
+    def load_settings(self, path: str) -> tuple[bool, str]:
+        # Parse everything before touching state so a bad file leaves the store unchanged.
+        try:
+            in_path = Path(path)
+            payload = json.loads(in_path.read_text(encoding="utf-8"))
+
+            bounds = {}
+            for k, default in self.DEFAULT_BOUNDS.items():
+                lo, hi = payload["bounds"][k]
+                lo, hi = int(lo), int(hi)
+                if not (default[0] <= lo <= default[1] and default[0] <= hi <= default[1]):
+                    raise ValueError(f"{k} bounds {lo}-{hi} outside {default[0]}-{default[1]}")
+                if k != "H" and lo > hi:
+                    raise ValueError(f"{k} bounds {lo}-{hi} are reversed (only H may wrap)")
+                bounds[k] = [lo, hi]
+
+            min_area = max(1, int(payload.get("min_area", 1)))
+            merge_distance = max(0, int(payload.get("merge_distance", 0)))
+
+            colors = []
+            for c in payload.get("colors", []):
+                bgr = np.array(c["BGR"], dtype=np.uint8)
+                if bgr.shape != (3,):
+                    raise ValueError(f"bad BGR entry: {c['BGR']}")
+                colors.append({"BGR": bgr, "H": int(c["H"]), "S": int(c["S"]), "V": int(c["V"])})
+        except Exception as exc:
+            return False, f"Load failed: {exc}"
+
+        self._bounds = bounds
+        self._min_area = min_area
+        self._merge_distance = merge_distance
+        self._colors = colors
+        self.colors_changed.emit()
+        self.bounds_changed.emit()
+        self.detection_settings_changed.emit()
+        return True, f"Loaded settings from {in_path.name}"

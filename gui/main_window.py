@@ -85,6 +85,7 @@ class MainWindow(QMainWindow):
     def _on_detection_settings_changed(self):
         self.video_panel.update_mask_overlay()
         self.video_panel.invalidate_detection_markers()
+        self.right_panel.histogram_tab.sync_detection_controls()
         self.right_panel.histogram_tab._update_frame_stats()
 
     def _jump_to_frame(self, frame_idx):

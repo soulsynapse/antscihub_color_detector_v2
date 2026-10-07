@@ -32,9 +32,12 @@ class AnalysisWorker(QThread):
 
     def run(self):
         from core.mask_builder import build_mask
+        from core.contour_utils import find_valid_contours
 
         bounds = self.color_store.get_bounds()
         default_bounds = self.color_store.DEFAULT_BOUNDS
+        min_area = self.color_store.min_area
+        merge_distance = self.color_store.merge_distance
 
         if not self.color_store.has_any_bounds():
             self.finished.emit({})
@@ -48,6 +51,9 @@ class AnalysisWorker(QThread):
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0:
+            fps = 30.0
 
         frames_to_analyze = list(range(0, total, self.frame_step))
         num_to_analyze = len(frames_to_analyze)
@@ -71,8 +77,7 @@ class AnalysisWorker(QThread):
                     continue
 
                 mask = build_mask(frame, bounds, default_bounds)
-                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                valid = [c for c in contours if cv2.contourArea(c) > 25]
+                valid = find_valid_contours(mask, min_area, merge_distance)
 
                 detection_timeline[frame_idx] = len(valid) > 0
                 count_per_frame[frame_idx] = len(valid)
@@ -99,14 +104,13 @@ class AnalysisWorker(QThread):
                     self.finished.emit({})
                     return
 
-                cap.set(cv2.CAP_PROP_POS_MSEC, frame_idx * 1000.0 / cap.get(cv2.CAP_PROP_FPS))
+                cap.set(cv2.CAP_PROP_POS_MSEC, frame_idx * 1000.0 / fps)
                 ret, frame = cap.read()
                 if not ret:
                     continue
 
                 mask = build_mask(frame, bounds, default_bounds)
-                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                valid = [c for c in contours if cv2.contourArea(c) > 25]
+                valid = find_valid_contours(mask, min_area, merge_distance)
 
                 detection_timeline[frame_idx] = len(valid) > 0
                 count_per_frame[frame_idx] = len(valid)
@@ -668,7 +672,7 @@ class AnalysisTab(QWidget):
         self.status_label.setText("Analyzing...")
         self.progress_bar.setValue(0)
 
-        self.worker = AnalysisWorker(self.video_manager, self.color_store)
+        self.worker = AnalysisWorker(self.video_manager, self.color_store, self.frame_step)
         self.worker.progress.connect(self._on_progress)
         self.worker.finished.connect(self._on_finished)
         self.worker.start()
@@ -696,12 +700,15 @@ class AnalysisTab(QWidget):
         self.status_label.setText("Analysis complete!")
         self.progress_bar.setValue(100)
 
-        timeline = results['detection_timeline']
+        # Keep only the analyzed frames so skipped ones don't read as misses
+        step = results['frame_step']
+        timeline = results['detection_timeline'][::step]
         sizes = results['sizes']
         circularities = results['circularities']
-        counts = results['count_per_frame']
+        counts = results['count_per_frame'][::step]
         heatmap = results['heatmap']
         total_frames = results['total_frames']
+        analyzed = results['frames_analyzed']
 
         # Stats summary
         detected_frames = sum(1 for t in timeline if t)
@@ -712,9 +719,10 @@ class AnalysisTab(QWidget):
 
         stats_text = (
             f"Total Frames: {total_frames}\n"
-            f"Frames with Detection: {detected_frames} ({100 * detected_frames / max(1, total_frames):.1f}%)\n"
+            f"Frames Analyzed: {analyzed} (every {step})\n"
+            f"Frames with Detection: {detected_frames} ({100 * detected_frames / max(1, analyzed):.1f}%)\n"
             f"Total Detections: {total_detections}\n"
-            f"Avg Detections/Frame: {total_detections / max(1, total_frames):.2f}\n"
+            f"Avg Detections/Frame: {total_detections / max(1, analyzed):.2f}\n"
             f"Avg Detection Size: {avg_size:.1f} px²\n"
             f"Median Detection Size: {median_size:.1f} px²\n"
             f"Avg Circularity: {avg_circ:.3f}\n"
