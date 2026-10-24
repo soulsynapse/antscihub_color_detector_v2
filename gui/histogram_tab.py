@@ -1,4 +1,3 @@
-# gui/histogram_tab.py (COMPLETE UPDATED VERSION)
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                               QSizePolicy, QLabel, QPushButton, QSlider,
                               QSpinBox, QFrame, QGroupBox)
@@ -12,8 +11,6 @@ from core.mask_builder import build_mask
 from gui.histogram_widget import HistogramWidget
 from gui.color_list_widget import ColorListWidget
 
-
-# In gui/histogram_tab.py, replace the FrameSearchWorker class:
 
 class FrameSearchWorker(QThread):
     found = pyqtSignal(int)
@@ -385,18 +382,22 @@ class HistogramTab(QWidget):
             self.color_store.get_bounds(),
             self.color_store.DEFAULT_BOUNDS,
             self.color_store.min_area,
-            self.merge_spinbox.value(),
+            self.color_store.merge_distance,
             condition,
             num_samples=200,
             start_frame=start,
         )
         self.search_worker.found.connect(self._on_search_found)
         self.search_worker.not_found.connect(self._on_search_not_found)
+        self.search_worker.progress.connect(self._on_search_progress)
         self.search_worker.start()
 
     def _find_next(self):
         if self._last_search_type:
             self._start_search(self._last_search_type)
+
+    def _on_search_progress(self, pct):
+        self.search_status.setText(f"Searching for '{self._last_search_type}'... {pct}%")
 
     def _on_search_found(self, frame_idx):
         self._set_search_buttons_enabled(True)
@@ -418,7 +419,6 @@ class HistogramTab(QWidget):
         self.find_max_btn.setEnabled(enabled)
         self.find_next_btn.setEnabled(enabled and self._last_search_type is not None)
 
-    # In gui/histogram_tab.py, replace _update_frame_stats:
     def _update_frame_stats(self):
         if not self.video_manager.is_loaded() or not self.color_store.has_any_bounds():
             return
@@ -471,12 +471,6 @@ class HistogramTab(QWidget):
             self.hint_label.setStyleSheet(
                 "color: #666; font-size: 10px; font-style: italic; padding: 2px;"
             )
-
-    def keyPressEvent(self, event):
-        super().keyPressEvent(event)
-
-    def keyReleaseEvent(self, event):
-        super().keyReleaseEvent(event)
 
     def update_histograms(self):
         colors = self.color_store.get_all_colors()
